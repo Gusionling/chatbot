@@ -3,6 +3,9 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, QL
 from PyQt5.QtCore import Qt
 from openai import OpenAI
 import os
+
+# 경로 설정
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from config import OPENAI_API_KEY
 
 class ChatbotGUI(QWidget):

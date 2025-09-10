@@ -2,7 +2,12 @@
 import PyPDF2
 import os
 from openai import OpenAI
+import sys
+
+# 경로 설정
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from config import OPENAI_API_KEY
+
 import json
 import numpy as np
 from typing import List, Dict

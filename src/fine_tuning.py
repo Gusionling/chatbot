@@ -1,6 +1,10 @@
 from openai import OpenAI
 import json
 import os
+import sys
+
+# 경로 설정
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from config import OPENAI_API_KEY
 
 class FineTuningManager:

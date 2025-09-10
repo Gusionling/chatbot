@@ -20,6 +20,12 @@ def check_requirements():
 
 def check_api_key():
     """API 키가 설정되어 있는지 확인"""
+    import sys
+    import os
+    
+    # config.py가 있는 루트 디렉토리를 경로에 추가
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    
     from config import OPENAI_API_KEY
     
     if OPENAI_API_KEY == "YOUR_OPENAI_API_KEY_HERE":
@@ -48,6 +54,10 @@ def main():
     
     # 메인 애플리케이션 실행
     try:
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
+        
         from PyQt5.QtWidgets import QApplication
         from main import ChatbotGUI
         
