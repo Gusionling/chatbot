@@ -1,5 +1,32 @@
+# Original dependencies
 openai>=1.0.0
 PyQt5>=5.15.0
 python-dotenv>=0.19.0
 PyPDF2>=3.0.0
 numpy>=1.21.0
+
+# LangGraph dependencies
+langgraph>=0.6.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.3.0
+langchain-community>=0.3.0
+
+# Additional tools and utilities
+tavily-python>=0.5.0
+faiss-cpu>=1.8.0
+
+# Enhanced PDF processing
+pypdf>=4.0.0
+sentence-transformers>=2.2.0
+
+# Memory and storage
+psycopg[binary,pool]>=3.1.0
+
+# Async support
+aiohttp>=3.8.0
+asyncio>=3.4.3
+
+# Development and testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
