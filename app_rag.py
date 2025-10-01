@@ -50,10 +50,10 @@ graph = graph_builder.compile()
 def visualize_graph():
     """그래프 구조를 Mermaid 형태로 시각화합니다."""
     try:
-        print("\n📊 그래프 구조 (Mermaid):")
+        print("\n 그래프 구조 (Mermaid):")
         print(graph.get_graph().draw_mermaid())
     except Exception as e:
-        print(f"❌ 시각화 오류: {e}")
+        print(f" 시각화 오류: {e}")
 
 # 테스트 실행
 if __name__ == "__main__":
