@@ -46,9 +46,21 @@ print("실행 흐름: START → chatbot → END")
 # 그래프 컴파일
 graph = graph_builder.compile()
 
+# 그래프 시각화 함수
+def visualize_graph():
+    """그래프 구조를 Mermaid 형태로 시각화합니다."""
+    try:
+        print("\n📊 그래프 구조 (Mermaid):")
+        print(graph.get_graph().draw_mermaid())
+    except Exception as e:
+        print(f"❌ 시각화 오류: {e}")
+
 # 테스트 실행
 if __name__ == "__main__":
     from langchain_core.messages import HumanMessage
+
+    # 그래프 시각화
+    visualize_graph()
 
     # 사용자 입력
     user_input = "안녕하세요! LangGraph에 대해 알려주세요."
@@ -56,7 +68,7 @@ if __name__ == "__main__":
     # 그래프 실행
     inputs = {"messages": [HumanMessage(content=user_input)]}
 
-    print(f"사용자: {user_input}")
+    print(f"\n사용자: {user_input}")
     print("=" * 50)
 
     # 스트리밍 출력
