@@ -1,83 +1,173 @@
-from typing import Annotated
-from typing_extensions import TypedDict
+from typing import Annotated, TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-
-class State(TypedDict):
-    """챗봇의 상태를 정의하는 타입
-
-    messages: 대화 메시지 리스트
-    - add_messages 함수를 통해 새 메시지가 추가됨 (덮어쓰기가 아닌 추가)
-    """
-    
-    messages:  Annotated[list, add_messages]
-
-#StateGraph 생성
-graph_builder = StateGraph(State)
-
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 from config import DEFAULT_MODEL
 
-#OpenAI ahepf tkdyd
+# PDF RAG 관련 imports
+import sys
+import os
+sys.path.append('src')
+from pdf_processor import PDFProcessor
+
+# RAG State 정의
+class RAGState(TypedDict):
+    """RAG 챗봇의 상태를 정의하는 타입"""
+    question: Annotated[str, "사용자 질문"]
+    context: Annotated[str, "검색된 문서 컨텍스트"]
+    answer: Annotated[str, "생성된 답변"]
+    messages: Annotated[list, add_messages]
+
+# LLM 설정
 llm = ChatOpenAI(model=DEFAULT_MODEL, temperature=0)
 
+# PDF 프로세서 초기화 (기존 chatboot의 PDF 기능 활용)
+pdf_processor = PDFProcessor()
 
-# 챗봇 노드 추가
-def chatbot(state: State):
-    """챗봇 노드 함수
+# RAG 노드 함수들
+def retrieve_document(state: RAGState) -> RAGState:
+    """문서 검색 노드"""
+    question = state["question"]
 
-    현재 상태의 메시지를 받아 LLM에 전달하고,
-    응답을 새 메시지로 추가하여 반환합니다.
-    """
-    response = llm.invoke(state["messages"])
+    # PDF가 로드되어 있다면 검색 수행
+    if hasattr(pdf_processor, 'chunks') and pdf_processor.chunks:
+        similar_docs = pdf_processor.find_similar_documents(question, top_k=3)
 
-    return {"messages":[response]}
+        if similar_docs:
+            # 검색 결과를 컨텍스트로 포맷팅
+            context = "다음은 관련 문서 내용입니다:\n\n"
+            for i, doc in enumerate(similar_docs):
+                context += f"문서 {i+1}: {doc['document']}\n\n"
+        else:
+            context = "관련 문서를 찾을 수 없습니다."
+    else:
+        context = "PDF 문서가 로드되지 않았습니다. 일반적인 질문에 답변하겠습니다."
 
-graph_builder.add_node("chatbot", chatbot)
+    return {"context": context}
 
-# 진입점: 그래프 실행이 시작되는 지점
-graph_builder.add_edge(START, "chatbot")
+def llm_answer(state: RAGState) -> RAGState:
+    """답변 생성 노드"""
+    question = state["question"]
+    context = state["context"]
 
-# 종료점: 그래프 실행이 끝나는 지점
-graph_builder.add_edge("chatbot", END)
+    # 프롬프트 구성
+    if "PDF 문서가 로드되지 않았습니다" in context:
+        # PDF가 없는 경우 일반 답변
+        prompt = f"질문: {question}\n\n답변해주세요."
+    else:
+        # PDF 기반 답변
+        prompt = f"다음 컨텍스트를 참고하여 질문에 답변해주세요.\n\n컨텍스트:\n{context}\n\n질문: {question}\n\n답변:"
 
-print("실행 흐름: START → chatbot → END")
+    # LLM 호출
+    response = llm.invoke([HumanMessage(content=prompt)])
+    answer = response.content
+
+    return {
+        "answer": answer,
+        "messages": [("user", question), ("assistant", answer)]
+    }
+
+# 그래프 생성
+graph_builder = StateGraph(RAGState)
+
+# 노드 추가
+graph_builder.add_node("retrieve", retrieve_document)
+graph_builder.add_node("llm_answer", llm_answer)
+
+# 엣지 정의
+graph_builder.add_edge("retrieve", "llm_answer")
+graph_builder.add_edge("llm_answer", END)
+
+# 진입점 설정
+graph_builder.set_entry_point("retrieve")
+
+print("실행 흐름: START → retrieve → llm_answer → END")
+
+# 체크포인터 설정
+memory = MemorySaver()
 
 # 그래프 컴파일
-graph = graph_builder.compile()
+graph = graph_builder.compile(checkpointer=memory)
 
 # 그래프 시각화 함수
 def visualize_graph():
     """그래프 구조를 Mermaid 형태로 시각화합니다."""
     try:
-        print("\n 그래프 구조 (Mermaid):")
+        print("\n RAG 그래프 구조 (Mermaid):")
         print(graph.get_graph().draw_mermaid())
     except Exception as e:
         print(f" 시각화 오류: {e}")
 
-# 테스트 실행
-if __name__ == "__main__":
-    from langchain_core.messages import HumanMessage
+# PDF 로드 함수
+def load_pdf(file_path: str) -> bool:
+    """PDF 파일을 로드합니다."""
+    try:
+        success = pdf_processor.process_pdf(file_path)
+        if success:
+            print(f" PDF 로드 성공: {file_path}")
+            return True
+        else:
+            print(f" PDF 로드 실패: {file_path}")
+            return False
+    except Exception as e:
+        print(f" PDF 로드 오류: {e}")
+        return False
 
+# RAG 실행 함수
+def run_rag(question: str, config: RunnableConfig = None):
+    """RAG 시스템을 실행합니다."""
+    if config is None:
+        config = RunnableConfig(
+            recursion_limit=20,
+            configurable={"thread_id": "rag_session_1"}
+        )
+
+    # 입력 상태 구성
+    inputs = RAGState(question=question)
+
+    print(f" 질문: {question}")
+    print("=" * 60)
+
+    # 그래프 실행
+    for output in graph.stream(inputs, config):
+        for key, value in output.items():
+            if key == "retrieve":
+                print(f" 문서 검색 완료")
+            elif key == "llm_answer":
+                print(f" 답변: {value['answer']}")
+
+    print("=" * 60)
+    return graph.get_state(config).values
+
+# 테스트
+if __name__ == "__main__":
     # 그래프 시각화
     visualize_graph()
 
-    # 사용자 입력
-    user_input = "안녕하세요! LangGraph에 대해 알려주세요."
+    print("\n" + "="*60)
+    print(" RAG 시스템 시작")
+    print("="*60)
 
-    # 그래프 실행
-    inputs = {"messages": [HumanMessage(content=user_input)]}
+    # 예시 질문들
+    questions = [
+        "LangGraph에 대해 알려주세요.",
+        "PDF 문서가 로드되었나요?",
+        "인공지능의 미래는 어떨까요?"
+    ]
 
-    print(f"\n사용자: {user_input}")
-    print("=" * 50)
+    # 설정
+    config = RunnableConfig(
+        recursion_limit=20,
+        configurable={"thread_id": "test_session"}
+    )
 
-    # 스트리밍 출력
-    for output in graph.stream(inputs):
-        for key, value in output.items():
-            print(f"노드 '{key}' 실행 결과:")
-            if "messages" in value:
-                last_message = value["messages"][-1]
-                print(f"챗봇: {last_message.content}")
+    # 각 질문 실행
+    for i, question in enumerate(questions, 1):
+        print(f"\n[테스트 {i}]")
+        result = run_rag(question, config)
 
-    print("=" * 50)
-    print("완료!")
+    print("\n 테스트 완료!")
+    print(" PDF를 로드하려면 load_pdf('파일경로') 함수를 사용하세요.")
