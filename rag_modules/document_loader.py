@@ -1,6 +1,6 @@
 """
 표준 RAG Document Loading 모듈
-- PDFPlumberLoader를 사용한 고품질 PDF 텍스트 추출
+- PDFPlumberLoader를 사용
 """
 
 from langchain_community.document_loaders import PDFPlumberLoader
@@ -36,7 +36,7 @@ class StandardDocumentLoader:
             if not file_path.lower().endswith('.pdf'):
                 raise ValueError(f"PDF 파일이 아닙니다: {file_path}")
 
-            print(f"📄 PDF 로딩 시작: {file_path}")
+            print(f"PDF 로딩 시작: {file_path}")
 
             # PDFPlumberLoader 사용 (고품질 텍스트 추출)
             loader = PDFPlumberLoader(file_path)
@@ -54,11 +54,11 @@ class StandardDocumentLoader:
                     'loader_type': 'PDFPlumberLoader'
                 })
 
-            print(f"✅ PDF 로딩 완료: {len(documents)}개 페이지")
+            print(f"PDF 로딩 완료: {len(documents)}개 페이지")
             return documents
 
         except Exception as e:
-            print(f"❌ PDF 로딩 실패: {e}")
+            print(f"PDF 로딩 실패: {e}")
             raise
 
     def load_multiple_pdfs(self, file_paths: List[str]) -> List[Document]:
@@ -86,10 +86,10 @@ class StandardDocumentLoader:
                 continue
 
         # 결과 요약
-        print(f"\n📊 로딩 결과:")
-        print(f"✅ 성공: {len(successful_files)}개 파일")
-        print(f"❌ 실패: {len(failed_files)}개 파일")
-        print(f"📄 총 문서: {len(all_documents)}개 페이지")
+        print(f"\n로딩 결과:")
+        print(f" 성공: {len(successful_files)}개 파일")
+        print(f" 실패: {len(failed_files)}개 파일")
+        print(f" 총 문서: {len(all_documents)}개 페이지")
 
         if failed_files:
             print(f"실패한 파일들: {failed_files}")
@@ -113,7 +113,6 @@ class StandardDocumentLoader:
         }
 
 
-# 사용 예시 및 테스트
 if __name__ == "__main__":
     loader = StandardDocumentLoader()
 
