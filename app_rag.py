@@ -7,11 +7,15 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from config import DEFAULT_MODEL
 
-# PDF RAG 관련 imports
+# 표준 RAG 모듈 imports
 import sys
 import os
-sys.path.append('src')
-from pdf_processor import PDFProcessor
+sys.path.append('rag_modules')
+from rag_modules.document_loader import StandardDocumentLoader
+from rag_modules.text_splitter import StandardTextSplitter
+from rag_modules.embeddings import StandardEmbeddings
+from rag_modules.vector_store import StandardVectorStore
+from rag_modules.retriever import StandardRetriever
 
 # RAG State 정의
 class RAGState(TypedDict):
@@ -24,25 +28,34 @@ class RAGState(TypedDict):
 # LLM 설정
 llm = ChatOpenAI(model=DEFAULT_MODEL, temperature=0)
 
-# PDF 프로세서 초기화 (기존 chatboot의 PDF 기능 활용)
-pdf_processor = PDFProcessor()
+# 표준 RAG 컴포넌트 초기화
+document_loader = StandardDocumentLoader()
+text_splitter = StandardTextSplitter(chunk_size=1000, chunk_overlap=200)
+embedder = StandardEmbeddings()
+embeddings = embedder.get_embeddings()
+vector_store = StandardVectorStore(embeddings)
+retriever = None  # PDF 로드 후 생성
 
 # RAG 노드 함수들
 def retrieve_document(state: RAGState) -> RAGState:
     """문서 검색 노드"""
+    global retriever
     question = state["question"]
 
-    # PDF가 로드되어 있다면 검색 수행
-    if hasattr(pdf_processor, 'chunks') and pdf_processor.chunks:
-        similar_docs = pdf_processor.find_similar_documents(question, top_k=3)
+    # 리트리버가 초기화되어 있다면 검색 수행
+    if retriever is not None:
+        try:
+            # 표준 RAG 검색 수행
+            documents = retriever.retrieve(question)
 
-        if similar_docs:
-            # 검색 결과를 컨텍스트로 포맷팅
-            context = "다음은 관련 문서 내용입니다:\n\n"
-            for i, doc in enumerate(similar_docs):
-                context += f"문서 {i+1}: {doc['document']}\n\n"
-        else:
-            context = "관련 문서를 찾을 수 없습니다."
+            if documents:
+                # 검색 결과를 컨텍스트로 포맷팅
+                context = retriever.format_context(documents)
+            else:
+                context = "관련 문서를 찾을 수 없습니다."
+        except Exception as e:
+            print(f"문서 검색 오류: {e}")
+            context = "문서 검색 중 오류가 발생했습니다."
     else:
         context = "PDF 문서가 로드되지 않았습니다. 일반적인 질문에 답변하겠습니다."
 
@@ -103,17 +116,31 @@ def visualize_graph():
 
 # PDF 로드 함수
 def load_pdf(file_path: str) -> bool:
-    """PDF 파일을 로드합니다."""
+    """PDF 파일을 로드하고 표준 RAG 파이프라인을 구성합니다."""
+    global retriever
+
     try:
-        success = pdf_processor.process_pdf(file_path)
-        if success:
-            print(f" PDF 로드 성공: {file_path}")
-            return True
-        else:
-            print(f" PDF 로드 실패: {file_path}")
-            return False
+        print(f"표준 RAG 파이프라인으로 PDF 로드: {file_path}")
+
+        # 1. 문서 로드
+        documents = document_loader.load_pdf(file_path)
+
+        # 2. 텍스트 분할
+        split_docs = text_splitter.split_documents(documents)
+
+        # 3. 벡터 저장소 생성
+        vector_store.create_vectorstore(split_docs)
+
+        # 4. 리트리버 생성
+        retriever = StandardRetriever(vector_store, k=3)
+
+        print(f"표준 RAG 파이프라인 구성 완료")
+        print(f"   - 로드된 페이지: {len(documents)}개")
+        print(f"   - 분할된 청크: {len(split_docs)}개")
+        return True
+
     except Exception as e:
-        print(f" PDF 로드 오류: {e}")
+        print(f"PDF 로드 실패: {e}")
         return False
 
 # RAG 실행 함수
