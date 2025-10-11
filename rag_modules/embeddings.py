@@ -73,15 +73,6 @@ class StandardEmbeddings:
         """임베딩 객체를 반환합니다."""
         return self.embeddings
 
-    def get_model_info(self) -> dict:
-        """임베딩 모델 정보를 반환합니다."""
-        return {
-            "model": self.model,
-            "cache_dir": str(self.cache_dir),
-            "provider": "OpenAI",
-            "cache_enabled": True
-        }
-
 
 # 사용 예시 및 테스트
 if __name__ == "__main__":
@@ -107,10 +98,6 @@ if __name__ == "__main__":
         query = "AI에 대해 알려주세요"
         query_embedding = embeddings.embed_query(query)
         print(f"쿼리 임베딩 완료: {len(query_embedding)} 차원")
-
-        # 모델 정보
-        info = embedder.get_model_info()
-        print(f"모델 정보: {info}")
 
     except Exception as e:
         print(f"테스트 실패: {e}")

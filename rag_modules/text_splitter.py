@@ -54,7 +54,7 @@ class StandardTextSplitter:
             keep_separator=True,  # 구분자 유지
             is_separator_regex=False,
         )
-
+    # 솔직히 이게 중요한 함수이고 그외 함수들은 굳이 필요 없는 함수들이다. 
     def split_documents(self, documents: List[Document]) -> List[Document]:
         """
         문서 리스트를 청크로 분할합니다.
@@ -101,29 +101,7 @@ class StandardTextSplitter:
 
         return split_docs
 
-    def split_text(self, text: str) -> List[str]:
-        """
-        단일 텍스트를 청크로 분할합니다.
-
-        Args:
-            text: 분할할 텍스트
-
-        Returns:
-            분할된 텍스트 리스트
-        """
-        if not text.strip():
-            print("분할할 텍스트가 없습니다.")
-            return []
-
-        print(f"텍스트 분할 시작: {len(text)} 문자")
-
-        # 텍스트 분할
-        chunks = self.text_splitter.split_text(text)
-
-        print(f"텍스트 분할 완료: {len(chunks)}개 청크")
-
-        return chunks
-
+    # 테스트 용이다. 청크가 잘 잘렸는지 보고 싶을 때 사용하려고 만들었다.
     def get_chunk_preview(self, documents: List[Document], num_previews: int = 3) -> None:
         """
         분할된 청크의 미리보기를 출력합니다.
@@ -150,16 +128,8 @@ class StandardTextSplitter:
 
         print("=" * 60)
 
+    # 메인 함수에서 테스트 결과를 보기 위함이다.
     def analyze_chunks(self, documents: List[Document]) -> dict:
-        """
-        청크 분석 정보를 반환합니다.
-
-        Args:
-            documents: 분석할 Document 리스트
-
-        Returns:
-            청크 분석 결과 딕셔너리
-        """
         if not documents:
             return {"message": "분석할 문서가 없습니다."}
 

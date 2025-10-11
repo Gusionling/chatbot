@@ -14,8 +14,7 @@ sys.path.append('rag_modules')
 from rag_modules.document_loader import StandardDocumentLoader
 from rag_modules.text_splitter import StandardTextSplitter
 from rag_modules.embeddings import StandardEmbeddings
-from rag_modules.vector_store import StandardVectorStore
-from rag_modules.retriever import StandardRetriever
+from rag_modules import vector_store
 
 # RAG State 정의
 class RAGState(TypedDict):
@@ -33,7 +32,6 @@ document_loader = StandardDocumentLoader()
 text_splitter = StandardTextSplitter(chunk_size=1000, chunk_overlap=200)
 embedder = StandardEmbeddings()
 embeddings = embedder.get_embeddings()
-vector_store = StandardVectorStore(embeddings)
 retriever = None  # PDF 로드 후 생성
 
 # RAG 노드 함수들
@@ -45,12 +43,12 @@ def retrieve_document(state: RAGState) -> RAGState:
     # 리트리버가 초기화되어 있다면 검색 수행
     if retriever is not None:
         try:
-            # 표준 RAG 검색 수행
-            documents = retriever.retrieve(question)
+            # 문서 검색
+            documents = retriever.invoke(question)
 
+            # 컨텍스트 포맷팅
             if documents:
-                # 검색 결과를 컨텍스트로 포맷팅
-                context = retriever.format_context(documents)
+                context = "\n\n".join([f"문서 {i+1}: {doc.page_content}" for i, doc in enumerate(documents)])
             else:
                 context = "관련 문서를 찾을 수 없습니다."
         except Exception as e:
@@ -120,8 +118,6 @@ def load_pdf(file_path: str) -> bool:
     global retriever
 
     try:
-        print(f"표준 RAG 파이프라인으로 PDF 로드: {file_path}")
-
         # 1. 문서 로드
         documents = document_loader.load_pdf(file_path)
 
@@ -129,14 +125,12 @@ def load_pdf(file_path: str) -> bool:
         split_docs = text_splitter.split_documents(documents)
 
         # 3. 벡터 저장소 생성
-        vector_store.create_vectorstore(split_docs)
+        vectorstore = vector_store.create_vectorstore(split_docs, embeddings)
 
         # 4. 리트리버 생성
-        retriever = StandardRetriever(vector_store, k=3)
+        retriever = vector_store.create_retriever(vectorstore, k=3)
 
-        print(f"표준 RAG 파이프라인 구성 완료")
-        print(f"   - 로드된 페이지: {len(documents)}개")
-        print(f"   - 분할된 청크: {len(split_docs)}개")
+        print(f"RAG 파이프라인 완료: {len(documents)}페이지 → {len(split_docs)}청크")
         return True
 
     except Exception as e:
