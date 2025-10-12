@@ -19,6 +19,7 @@ from rag_modules.document_loader import StandardDocumentLoader
 from rag_modules.text_splitter import StandardTextSplitter
 from rag_modules.embeddings import StandardEmbeddings
 from rag_modules import vector_store
+from rag_modules.relevance_grader import RelevanceGrader
 
 # RAG State 정의
 class RAGState(TypedDict):
@@ -26,6 +27,7 @@ class RAGState(TypedDict):
     question: Annotated[str, "사용자 질문"]
     context: Annotated[str, "검색된 문서 컨텍스트"]
     answer: Annotated[str, "생성된 답변"]
+    relevance: Annotated[str, "관련성 점수 (yes/no)"]
     messages: Annotated[list, add_messages]
 
 # LLM 설정
@@ -37,6 +39,13 @@ text_splitter = StandardTextSplitter(chunk_size=1000, chunk_overlap=200)
 embedder = StandardEmbeddings()
 embeddings = embedder.get_embeddings()
 retriever = None  # PDF 로드 후 생성
+
+# 관련성 평가기 초기화
+relevance_grader = RelevanceGrader(
+    model=DEFAULT_MODEL,
+    temperature=0,
+    target="question-retrieval"
+)
 
 # RAG 노드 함수들
 def retrieve_document(state: RAGState) -> RAGState:
@@ -63,23 +72,69 @@ def retrieve_document(state: RAGState) -> RAGState:
 
     return {"context": context}
 
-def llm_answer(state: RAGState) -> RAGState:
-    """답변 생성 노드"""
+def check_relevance(state: RAGState) -> RAGState:
+    """관련성 평가 노드"""
     question = state["question"]
     context = state["context"]
-    # 상태에서 이전 대화 기록을 가져온다. 
+
+    # PDF가 로드되지 않았거나 문서가 없으면 관련성을 "no"로 설정
+    if "PDF 문서가 로드되지 않았습니다" in context or "관련 문서를 찾을 수 없습니다" in context:
+        print("[관련성 평가] 문서가 없어 평가 스킵 -> LLM 전용 답변")
+        return {"relevance": "no"}
+
+    # 관련성 평가 수행
+    try:
+        score = relevance_grader.grade(question=question, context=context)
+        print(f"[관련성 평가] 결과: {score}")
+        return {"relevance": score}
+    except Exception as e:
+        print(f"[관련성 평가] 오류: {e}")
+        return {"relevance": "no"}
+
+
+def decide_path(state: RAGState) -> str:
+    """조건부 분기: 관련성에 따라 경로 결정"""
+    relevance = state.get("relevance", "no")
+
+    if relevance == "yes":
+        print("[경로 결정] RAG 기반 답변 생성")
+        return "rag_answer"
+    else:
+        print("[경로 결정] LLM 전용 답변 생성")
+        return "llm_only_answer"
+
+
+def rag_answer(state: RAGState) -> RAGState:
+    """RAG 기반 답변 생성 노드 (문서 컨텍스트 활용)"""
+    question = state["question"]
+    context = state["context"]
     messages = state["messages"]
 
-    # 프롬프트 구성
-    if "PDF 문서가 로드되지 않았습니다" in context:
-        # PDF가 없는 경우 일반 답변
-        prompt = f"질문: {question}\n\n답변해주세요."
-    else:
-        # PDF 기반 답변
-        prompt = f"다음 컨텍스트를 참고하여 질문에 답변해주세요.\n\n컨텍스트:\n{context}\n\n질문: {question}\n\n답변:"
+    # RAG 프롬프트 구성
+    prompt = f"다음 컨텍스트를 참고하여 질문에 답변해주세요.\n\n컨텍스트:\n{context}\n\n질문: {question}\n\n답변:"
 
     messages_for_llm = messages + [HumanMessage(content=prompt)]
-    
+
+    # LLM 호출
+    response = llm.invoke(messages_for_llm)
+    answer = response.content
+
+    return {
+        "answer": answer,
+        "messages": [("user", question), ("assistant", answer)]
+    }
+
+
+def llm_only_answer(state: RAGState) -> RAGState:
+    """LLM 전용 답변 생성 노드 (문서 컨텍스트 미활용)"""
+    question = state["question"]
+    messages = state["messages"]
+
+    # 일반 프롬프트 구성 (컨텍스트 없이)
+    prompt = f"질문: {question}\n\n답변해주세요."
+
+    messages_for_llm = messages + [HumanMessage(content=prompt)]
+
     # LLM 호출
     response = llm.invoke(messages_for_llm)
     answer = response.content
@@ -94,16 +149,27 @@ graph_builder = StateGraph(RAGState)
 
 # 노드 추가
 graph_builder.add_node("retrieve", retrieve_document)
-graph_builder.add_node("llm_answer", llm_answer)
+graph_builder.add_node("check_relevance", check_relevance)
+graph_builder.add_node("rag_answer", rag_answer)
+graph_builder.add_node("llm_only_answer", llm_only_answer)
 
 # 엣지 정의
-graph_builder.add_edge("retrieve", "llm_answer")
-graph_builder.add_edge("llm_answer", END)
+graph_builder.add_edge(START, "retrieve")
+graph_builder.add_edge("retrieve", "check_relevance")
 
-# 진입점 설정
-graph_builder.set_entry_point("retrieve")
+# 조건부 엣지: 관련성에 따라 경로 분기
+graph_builder.add_conditional_edges(
+    "check_relevance",
+    decide_path,
+    {
+        "rag_answer": "rag_answer",
+        "llm_only_answer": "llm_only_answer"
+    }
+)
 
-print("실행 흐름: START → retrieve → llm_answer → END")
+# 양쪽 경로 모두 END로 연결
+graph_builder.add_edge("rag_answer", END)
+graph_builder.add_edge("llm_only_answer", END)
 
 # 체크포인터 설정
 memory = MemorySaver()
@@ -170,9 +236,11 @@ def run_rag(question: str, config: RunnableConfig = None):
     for output in graph.stream(inputs, config):
         for key, value in output.items():
             if key == "retrieve":
-                print(f" 문서 검색 완료")
-            elif key == "llm_answer":
-                print(f" 답변: {value['answer']}")
+                print(f"[문서 검색] 완료")
+            elif key == "rag_answer":
+                print(f"[답변] {value['answer']}")
+            elif key == "llm_only_answer":
+                print(f"[답변] {value['answer']}")
 
     print("=" * 60)
     return graph.get_state(config).values
