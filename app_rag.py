@@ -10,6 +10,10 @@ from config import DEFAULT_MODEL
 # 표준 RAG 모듈 imports
 import sys
 import os
+
+# OpenMP 라이브러리 충돌 방지
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 sys.path.append('rag_modules')
 from rag_modules.document_loader import StandardDocumentLoader
 from rag_modules.text_splitter import StandardTextSplitter
@@ -163,32 +167,48 @@ def run_rag(question: str, config: RunnableConfig = None):
     print("=" * 60)
     return graph.get_state(config).values
 
-# 테스트
+# 챗봇 실행
 if __name__ == "__main__":
-    # 그래프 시각화
-    visualize_graph()
-
     print("\n" + "="*60)
-    print(" RAG 시스템 시작")
+    print(" 인텔 제품 RAG 챗봇")
     print("="*60)
 
-    # 예시 질문들
-    questions = [
-        "LangGraph에 대해 알려주세요.",
-        "PDF 문서가 로드되었나요?",
-        "인공지능의 미래는 어떨까요?"
-    ]
+    # PDF 로드
+    pdf_path = "data/인텔_제품 - 나무위키.pdf"
+    print(f"\nPDF 로딩 중: {pdf_path}")
+
+    if load_pdf(pdf_path):
+        print("PDF 로드 성공! 인텔 제품에 대해 질문해주세요.\n")
+    else:
+        print("PDF 로드 실패. 일반 모드로 실행합니다.\n")
 
     # 설정
     config = RunnableConfig(
         recursion_limit=20,
-        configurable={"thread_id": "test_session"}
+        configurable={"thread_id": "chatbot_session"}
     )
 
-    # 각 질문 실행
-    for i, question in enumerate(questions, 1):
-        print(f"\n[테스트 {i}]")
-        result = run_rag(question, config)
+    print("대화를 시작합니다. (종료: 'exit', 'quit', '종료')")
+    print("="*60 + "\n")
 
-    print("\n 테스트 완료!")
-    print(" PDF를 로드하려면 load_pdf('파일경로') 함수를 사용하세요.")
+    # 대화형 루프
+    while True:
+        try:
+            question = input("질문: ").strip()
+
+            if not question:
+                continue
+
+            if question.lower() in ['exit', 'quit', '종료', 'q']:
+                print("\n챗봇을 종료합니다.")
+                break
+
+            print()
+            run_rag(question, config)
+            print()
+
+        except KeyboardInterrupt:
+            print("\n\n챗봇을 종료합니다.")
+            break
+        except Exception as e:
+            print(f"\n오류 발생: {e}\n")
