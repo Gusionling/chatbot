@@ -116,14 +116,25 @@ def visualize_graph():
     except Exception as e:
         print(f" 시각화 오류: {e}")
 
-# PDF 로드 함수
-def load_pdf(file_path: str) -> bool:
-    """PDF 파일을 로드하고 표준 RAG 파이프라인을 구성합니다."""
+# 문서 로드 함수
+def load_document(file_path: str) -> bool:
+    """문서 파일을 로드하고 표준 RAG 파이프라인을 구성합니다."""
     global retriever
 
     try:
-        # 1. 문서 로드
-        documents = document_loader.load_pdf(file_path)
+        # 파일 확장자에 따라 로드 방식 결정
+        if file_path.endswith('.pdf'):
+            documents = document_loader.load_pdf(file_path)
+        elif file_path.endswith('.txt') or file_path.endswith('.md'):
+            # 텍스트 파일 로드
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Document 객체로 변환
+            from langchain_core.documents import Document
+            documents = [Document(page_content=content, metadata={'source': file_path})]
+        else:
+            raise ValueError(f"지원하지 않는 파일 형식: {file_path}")
 
         # 2. 텍스트 분할
         split_docs = text_splitter.split_documents(documents)
@@ -134,11 +145,11 @@ def load_pdf(file_path: str) -> bool:
         # 4. 리트리버 생성
         retriever = vector_store.create_retriever(vectorstore, k=3)
 
-        print(f"RAG 파이프라인 완료: {len(documents)}페이지 → {len(split_docs)}청크")
+        print(f"RAG 파이프라인 완료: {len(documents)}개 문서 → {len(split_docs)}청크")
         return True
 
     except Exception as e:
-        print(f"PDF 로드 실패: {e}")
+        print(f"문서 로드 실패: {e}")
         return False
 
 # RAG 실행 함수
@@ -173,14 +184,14 @@ if __name__ == "__main__":
     print(" 인텔 제품 RAG 챗봇")
     print("="*60)
 
-    # PDF 로드
-    pdf_path = "data/인텔_제품 - 나무위키.pdf"
-    print(f"\nPDF 로딩 중: {pdf_path}")
+    # 문서 로드
+    doc_path = "data/intel_namu.txt"
+    print(f"\n문서 로딩 중: {doc_path}")
 
-    if load_pdf(pdf_path):
-        print("PDF 로드 성공! 인텔 제품에 대해 질문해주세요.\n")
+    if load_document(doc_path):
+        print("문서 로드 성공! 인텔 제품에 대해 질문해주세요.\n")
     else:
-        print("PDF 로드 실패. 일반 모드로 실행합니다.\n")
+        print("문서 로드 실패. 일반 모드로 실행합니다.\n")
 
     # 설정
     config = RunnableConfig(
