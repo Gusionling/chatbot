@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 from config import DEFAULT_MODEL
 
@@ -67,6 +67,8 @@ def llm_answer(state: RAGState) -> RAGState:
     """답변 생성 노드"""
     question = state["question"]
     context = state["context"]
+    # 상태에서 이전 대화 기록을 가져온다. 
+    messages = state["messages"]
 
     # 프롬프트 구성
     if "PDF 문서가 로드되지 않았습니다" in context:
@@ -76,8 +78,10 @@ def llm_answer(state: RAGState) -> RAGState:
         # PDF 기반 답변
         prompt = f"다음 컨텍스트를 참고하여 질문에 답변해주세요.\n\n컨텍스트:\n{context}\n\n질문: {question}\n\n답변:"
 
+    messages_for_llm = messages + [HumanMessage(content=prompt)]
+    
     # LLM 호출
-    response = llm.invoke([HumanMessage(content=prompt)])
+    response = llm.invoke(messages_for_llm)
     answer = response.content
 
     return {
@@ -127,12 +131,7 @@ def load_document(file_path: str) -> bool:
             documents = document_loader.load_pdf(file_path)
         elif file_path.endswith('.txt') or file_path.endswith('.md'):
             # 텍스트 파일 로드
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-
-            # Document 객체로 변환
-            from langchain_core.documents import Document
-            documents = [Document(page_content=content, metadata={'source': file_path})]
+            documents = document_loader.load_text_file(file_path)
         else:
             raise ValueError(f"지원하지 않는 파일 형식: {file_path}")
 

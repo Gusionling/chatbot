@@ -3,7 +3,7 @@
 - PDFPlumberLoader를 사용
 """
 
-from langchain_community.document_loaders import PDFPlumberLoader
+from langchain_community.document_loaders import PDFPlumberLoader, TextLoader
 from langchain_core.documents import Document
 from typing import List, Optional
 from pathlib import Path
@@ -16,6 +16,41 @@ class StandardDocumentLoader:
     def __init__(self):
         self.loaded_documents: List[Document] = []
         self.source_files: List[str] = []
+        
+    def load_text_file(self, file_path: str) -> List[Document]:
+        pass
+        try:
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"파일을 찾을 수 없습니다: {file_path}")
+            
+            if not file_path.lower().endswith('.txt'):
+                raise ValueError(f"txt 파일이 아닙니다 {file_path}")
+            
+            print(f"txt 파일 로딩 시작: {file_path}")
+            
+            loader = TextLoader(file_path, encoding='utf-8')
+            
+            documents = loader.load()
+            
+            if not documents:
+                raise ValueError(f"파일 내용이 비었습니다 : {file_path}")
+
+            # 3. 추가 메타데이터 업데이트
+            # TextLoader는 기본적으로 'source' 키에 파일 경로만 추가한다.
+            # 다른 로더와 메타데이터 형식을 맞추기 위해 정보를 추가
+            for doc in documents:
+                doc.metadata.update({
+                    'source_file': file_path,
+                    'file_name': Path(file_path).name,
+                    'loader_type': 'TextLoader'
+                })
+            
+            print(f"텍스트 파일 로딩 완료: {len(documents)}개의 문서")
+            return documents
+        except Exception as e: 
+            print(f"텍스트 파일 로딩 실패: {e}")
+            raise
+            
 
     def load_pdf(self, file_path: str) -> List[Document]:
         """

@@ -51,3 +51,6 @@ logs/
 data
 
 .cache
+
+rag
+naive_rag_app.py
