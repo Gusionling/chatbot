@@ -20,6 +20,7 @@ from rag_modules.text_splitter import StandardTextSplitter
 from rag_modules.embeddings import StandardEmbeddings
 from rag_modules import vector_store
 from rag_modules.relevance_grader import RelevanceGrader
+from rag_modules.query_rewriter import QueryRewriter
 
 # RAG State 정의
 class RAGState(TypedDict):
@@ -44,7 +45,7 @@ vectorstore = None  # 벡터 저장소 (거리 점수 계산용)
 
 # 관련성 평가 설정
 RELEVANCE_METHOD = "similarity"  # "similarity" 또는 "llm"
-SIMILARITY_THRESHOLD = 0.7  # 거리 임계값 (낮을수록 유사, 이 값보다 작으면 관련 있음)
+SIMILARITY_THRESHOLD = 1.5  # 거리 임계값 (낮을수록 유사, 이 값보다 작으면 관련 있음)
 
 # 관련성 평가기 초기화 (LLM 방식용)
 relevance_grader = RelevanceGrader(
@@ -53,7 +54,28 @@ relevance_grader = RelevanceGrader(
     target="question-retrieval"
 )
 
+# Query Rewriter 초기화
+query_rewriter = QueryRewriter(model=DEFAULT_MODEL, temperature=0)
+
 # RAG 노드 함수들
+def query_rewrite_node(state: RAGState) -> RAGState:
+    """질문 재작성 노드"""
+    original_question = state["question"]
+
+    print("\n" + "="*60)
+    print("[QUERY_REWRITE 노드 시작]")
+    print("="*60)
+    print(f"원본 질문: {original_question}")
+
+    # 질문 재작성
+    rewritten_question = query_rewriter.rewrite(original_question)
+
+    print(f"재작성된 질문: {rewritten_question}")
+    print("="*60)
+
+    return {"question": rewritten_question}
+
+
 def retrieve_document(state: RAGState) -> RAGState:
     """문서 검색 노드"""
     global retriever, vectorstore
@@ -264,13 +286,15 @@ def llm_only_answer(state: RAGState) -> RAGState:
 graph_builder = StateGraph(RAGState)
 
 # 노드 추가
+graph_builder.add_node("query_rewrite", query_rewrite_node)
 graph_builder.add_node("retrieve", retrieve_document)
 graph_builder.add_node("check_relevance", check_relevance)
 graph_builder.add_node("rag_answer", rag_answer)
 graph_builder.add_node("llm_only_answer", llm_only_answer)
 
 # 엣지 정의
-graph_builder.add_edge(START, "retrieve")
+graph_builder.add_edge(START, "query_rewrite")
+graph_builder.add_edge("query_rewrite", "retrieve")
 graph_builder.add_edge("retrieve", "check_relevance")
 
 # 조건부 엣지: 관련성에 따라 경로 분기
